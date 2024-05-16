@@ -1,0 +1,212 @@
+from graphics import *
+from Button import Button
+from random import randint
+
+class Wordle:
+    def __init__(self, interface):
+        self.wordle = ""
+        self.answer = ""
+        self.attempts = 0
+        self.interface = interface
+
+    def pickAnswer(self):
+        # choose one answer from wordle-words.txt
+        filename = "wordle-words.txt"
+        with open(filename, 'r') as fileobject:
+            list_of_wordles = fileobject.readlines()
+
+        w = randint(0, len(list_of_wordles) - 1)
+        self.answer = list_of_wordles[w].strip()
+        return self.answer
+
+    def user_guess(self, guess):
+        # get user's guess
+        self.wordle = guess.upper()
+
+    def check(self, answer):
+        # check whether the user's guess is correct or not
+        return self.wordle == answer
+
+    def hints(self):
+        ch = []
+        pos = []
+
+        for v in range(5):
+            for k in range(5):
+                if self.wordle[v] == self.answer[k]:
+                    # both character and position are the same as answer
+                    if v == k:
+                        pos.append(self.wordle[v])
+                    # just character is in the answer
+                    else:
+                        ch.append(self.wordle[v])
+        return ch, pos
+
+    def count(self):
+        # the number of times user has guessed the word
+        self.attempts += 1
+        return self.attempts
+
+    def gameOver(self):
+        # return True if user has attempted 6 times
+        return self.attempts == 6
+
+    def run(self):
+        self.playWordle()
+        while True:
+            if self.interface.want_To_Play():
+                self.attempts = 0
+                self.playWordle()
+            else:
+                break
+    
+    def playWordle(self):
+        self.attempts = self.game()
+        if self.attempts < 6:
+            self.interface.correct_guess(self.attempts)
+        else:
+            self.interface.show_answer(self.answer)
+    
+    def game(self):
+        self.pickAnswer()   # answer is stored to self.answer
+        print(self.answer)
+
+        while not self.check(self.answer) and not self.gameOver():
+            self.interface.setGuess(6 - self.attempts)
+            self.count()
+            g = self.interface.ask_guess(self.attempts)  # Pass attempts as parameter
+            if g is None:  # Handle quitting in the middle of the game
+                self.interface.close()
+                exit()
+            self.user_guess(g)        # user's guess is stored to self.wordle
+            self.check(self.answer)
+            ch, pos = self.hints()
+            self.interface.give_hints(ch, pos)
+
+        return self.attempts
+
+class GraphicsInterface:
+    def __init__(self):
+        # create the window for Wordle
+        win = GraphWin("Wordle", 600, 600)
+        win.setCoords(0, 0, 12, 18)
+        win.setBackground('White')
+        self.win = win
+
+        # create list of buttons
+        bSpecs = [(1.5, 5, 'Q'), (2.5, 5, 'W'), (3.5, 5, 'E'), (4.5, 5, 'R'), (5.5, 5, 'T'), (6.5, 5, 'Y'), 
+                  (7.5, 5, 'U'), (8.5, 5, 'I'), (9.5, 5, 'O'), (10.5, 5, 'P'),
+                  (2, 4, 'A'), (3, 4, 'S'), (4, 4, 'D'), (5, 4, 'F'), (6, 4, 'G'), (7, 4, 'H'), 
+                  (8, 4, 'J'), (9, 4, 'K'), (10, 4, 'L'),
+                  (3, 3, 'Z'), (4, 3, 'X'), (5, 3, 'C'), (6, 3, 'V'), (7, 3, 'B'), (8, 3, 'N'), (9, 3, 'M')]
+        
+        self.buttons = []
+        for (cx, cy, label) in bSpecs:
+            self.buttons.append(Button(self.win, Point(cx, cy), .75, .75, label))
+
+        # create the larger "ENTR", "DEL", "QUIT", and "Play Again" buttons
+        self.buttons.append(Button(self.win, Point(1.9, 3), 1.2, .75, "ENTR"))
+        self.buttons.append(Button(self.win, Point(10.1, 3), 1.2, .75, "DEL"))
+        self.buttons.append(Button(self.win, Point(4, 1), 1.2, .75, "Quit"))
+        self.buttons.append(Button(self.win, Point(7.6, 1), 1.2, .75, "Play Again"))
+
+        # create rectangles for the wordle grid
+        rec_y_1 = 7.6
+        rec_y_2 = 8.9
+        self.guess_rects = []
+        for v in range(6):
+            row = []
+            rec_x_1 = 1.1
+            rec_x_2 = 2.9
+            for h in range(5):
+                rect = Rectangle(Point(rec_x_1, rec_y_1), Point(rec_x_2, rec_y_2))
+                rect.setFill('White')
+                rect.setOutline('lightgray')
+                rect.draw(win)
+                row.append(rect)
+                rec_x_1 += 2
+                rec_x_2 += 2
+            self.guess_rects.append(row)
+            rec_y_1 += 1.5
+            rec_y_2 += 1.5
+
+        # activate buttons
+        self.choose(["Q", "W", "E", "R", 'T', 'Y', 'U', 'I', 'O', 'P', 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', 'Z', 'X', 'C', 'V', 'B', 'N', 'M',
+                      "ENTR", "DEL", "Quit"])
+
+        # create a banner
+        self.msg = Text(Point(6, 16), "Can you guess the Wordle?")
+        self.msg.setSize(18)
+        self.msg.setFill('darkgrey')
+        self.msg.setStyle('bold')
+        self.msg.draw(win)
+
+        self.current_guess = ""
+
+    def choose(self, choices):
+        buttons = self.buttons
+
+        # activate choice buttons, deactivate others
+        for b in buttons:
+            if b.getLabel() in choices:
+                b.activate()
+            else:
+                b.deactivate()
+
+        # get mouse clicks until an active button is clicked
+        while True:
+            p = self.win.getMouse()
+            for b in buttons:
+                if b.clicked(p):
+                    return b.getLabel()
+
+    def ask_guess(self, attempts):
+        self.current_guess = ""
+        guess_index = 0
+        while guess_index < 5:
+            choice = self.choose([chr(i) for i in range(65, 91)] + ["ENTR", "DEL", "Quit"])
+            if choice == "DEL" and guess_index > 0:
+                guess_index -= 1
+                self.guess_rects[attempts][guess_index].setFill("white")
+                self.current_guess = self.current_guess[:-1]
+            elif choice == "ENTR" and guess_index == 5:
+                return self.current_guess
+            elif choice == "Quit":
+                return None  # Return None to indicate quitting
+            elif choice not in ["ENTR", "DEL"] and guess_index < 5:
+                self.guess_rects[attempts][guess_index].setFill("lightgray")
+                Text(self.guess_rects[attempts][guess_index].getCenter(), choice).draw(self.win)
+                self.current_guess += choice
+                guess_index += 1
+
+    def setGuess(self, numG):
+        self.msg.setText(f"You have {numG} attempts left")
+
+    def correct_guess(self, numG):
+        self.msg.setText(f"You guessed the Wordle in {numG} guesses.")
+
+    def give_hints(self, ch, pos):
+        hints = []
+        if ch:
+            hints.append(f"{', '.join(ch)} are in the answer in a different position")
+        if pos:
+            hints.append(f"{', '.join(pos)} are in the answer in the same position")
+        self.msg.setText("\n".join(hints))
+
+    def show_answer(self, ans):
+        self.msg.setText(f"Wordle: {ans}")
+
+    def want_To_Play(self):
+        resp = self.choose(["Quit", "Play Again"])
+        return resp == "Play Again"
+
+    def close(self):
+        self.win.close()
+
+def test_Wordle():
+    inter = GraphicsInterface()
+    game = Wordle(inter)
+    game.run()
+
+test_Wordle()
+
